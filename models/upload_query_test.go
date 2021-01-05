@@ -14,7 +14,7 @@ func createSheet(rows [][]interface{}) *xlsx.Sheet {
 
 		for _, cellVal := range rowVal {
 			newCell := newRow.AddCell()
-			// library bug: when SetValue is executed with bool under cellVal, SetBool should be executed
+			// library bug: when SetValue is executed with bool under cellVal, SetBool isn't executed
 			if boolVal, ok := cellVal.(bool); ok {
 				newCell.SetBool(boolVal)
 			} else {
@@ -31,7 +31,7 @@ func createRow(rowVals []interface{}) *xlsx.Row {
 
 	for _, cellVal := range rowVals {
 		newCell := row.AddCell()
-		// library bug: when SetValue is executed with bool under cellVal, SetBool should be executed
+		// library bug: when SetValue is executed with bool under cellVal, SetBool isn't executed
 		if boolVal, ok := cellVal.(bool); ok {
 			newCell.SetBool(boolVal)
 		} else {
@@ -119,5 +119,22 @@ func TestFromExcelSheet(t *testing.T) {
 	if !reflect.DeepEqual(uploadQueries, expectedQueries) {
 		t.Errorf("Unexpected value.\nExpected: %+v with length %d\nGot: %+v with length %d",
 			expectedQueries, len(expectedQueries), uploadQueries, len(uploadQueries))
+	}
+}
+
+func TestBadData(t *testing.T) {
+	sellerId := 1
+	rowsVals := [][]interface{}{
+		{"bad offer_id", "offer_1", 300, 10, true},
+		{4, "offer_2", "bad price", 2, false},
+		{3, "offer_3", 10, "bad quantity", false},
+	}
+
+	for _, rowVal := range rowsVals {
+		row := createRow(rowVal)
+		_, err := models.FromExcelRow(row, sellerId)
+		if err == nil {
+			t.Errorf("Error expected. Input data: %+v", rowVal)
+		}
 	}
 }
