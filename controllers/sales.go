@@ -10,11 +10,11 @@ import (
 	"strings"
 )
 
-type SalesHandler struct {
+type Sales struct {
 	DB *sql.DB
 }
 
-func (h *SalesHandler) GetSales(w http.ResponseWriter, r *http.Request) {
+func (h *Sales) GetSales(w http.ResponseWriter, r *http.Request) {
 	var filters []string
 	var filterVals []interface{}
 
