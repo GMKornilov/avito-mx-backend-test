@@ -58,12 +58,12 @@ func (h *Sales) GetSales(w http.ResponseWriter, r *http.Request) {
 
 	nameQuery := r.URL.Query().Get("query")
 	if nameQuery != "" {
-		newFilter := fmt.Sprintf(`Name LIKE '%%' || $%d || '%%'`, len(filters)+1)
+		newFilter := fmt.Sprintf(`LOWER(name) LIKE '%%' || LOWER($%d) || '%%'`, len(filters)+1)
 		filters = append(filters, newFilter)
 		filterVals = append(filterVals, nameQuery)
 	}
 
-	query := "SELECT offer_id, seller_id, Name, Price, Quantity FROM offers"
+	query := "SELECT offer_id, seller_id, name, price, quantity FROM sales"
 	if len(filters) > 0 {
 		query += " WHERE "
 		query += strings.Join(filters, " AND ")
