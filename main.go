@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"github.com/fertilewaif/avito-mx-backend-test/controllers"
 	_ "github.com/lib/pq"
 	"net/http"
 )
@@ -15,7 +16,7 @@ func main() {
 		panic(err)
 	}
 
-	handler := &salesHandler{db}
-	http.HandleFunc("/offers/", handler.getOffers)
+	handler := &controllers.SalesHandler{DB: db}
+	http.HandleFunc("/offers/", handler.GetSales)
 	http.ListenAndServe(":8080", nil)
 }

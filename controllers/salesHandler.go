@@ -1,40 +1,37 @@
-package main
+package controllers
 
 import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/fertilewaif/avito-mx-backend-test/models"
 	"net/http"
 	"strconv"
 	"strings"
 )
 
-type salesHandler struct {
+type SalesHandler struct {
 	DB *sql.DB
 }
 
-type offer struct {
-	OfferId  int    `json:"offer_id"`
-	SellerId int    `json:"seller_id"`
-	Name     string `json:"name"`
-	Price    int    `json:"price"`
-	Quantity int    `json:"quantity"`
-}
-
-func (h *salesHandler) getOffers(w http.ResponseWriter, r *http.Request) {
+func (h *SalesHandler) GetSales(w http.ResponseWriter, r *http.Request) {
 	var filters []string
 	var filterVals []interface{}
-	var newFilter string
 
 	sellerIdStr := r.URL.Query().Get("seller_id")
 	if sellerIdStr != "" {
 		sellerId, err := strconv.Atoi(sellerIdStr)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("Invalid value of seller_id, must be integer"))
+			respError := models.Error{
+				Message: "Invalid value of seller_id, must be integer",
+				Code: http.StatusBadRequest,
+			}
+			respJson, _ := json.Marshal(respError)
+			w.Write(respJson)
 			return
 		} else {
-			newFilter = fmt.Sprintf("seller_id = $%d", len(filters)+1)
+			newFilter := fmt.Sprintf("seller_id = $%d", len(filters)+1)
 			filters = append(filters, newFilter)
 			filterVals = append(filterVals, sellerId)
 		}
@@ -45,10 +42,15 @@ func (h *salesHandler) getOffers(w http.ResponseWriter, r *http.Request) {
 		offerId, err := strconv.Atoi(sellerIdStr)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("Invalid value of offer_id, must be integer"))
+			respError := models.Error{
+				Message: "Invalid value of offer_id, must be integer",
+				Code: http.StatusBadRequest,
+			}
+			respJson, _ := json.Marshal(respError)
+			w.Write(respJson)
 			return
 		} else {
-			newFilter = fmt.Sprintf("offer_id = $%d", len(filters)+1)
+			newFilter := fmt.Sprintf("offer_id = $%d", len(filters)+1)
 			filters = append(filters, newFilter)
 			filterVals = append(filterVals, offerId)
 		}
@@ -56,7 +58,7 @@ func (h *salesHandler) getOffers(w http.ResponseWriter, r *http.Request) {
 
 	nameQuery := r.URL.Query().Get("query")
 	if nameQuery != "" {
-		newFilter = fmt.Sprintf(`Name LIKE '%' || $%d || '%'`, len(filters)+1)
+		newFilter := fmt.Sprintf(`Name LIKE '%' || $%d || '%'`, len(filters)+1)
 		filters = append(filters, newFilter)
 		filterVals = append(filterVals, nameQuery)
 	}
@@ -72,18 +74,30 @@ func (h *salesHandler) getOffers(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		// TODO: log error
-		http.Error(w, "Error processing query in SQL", 500)
+		respError := models.Error{
+			Code: http.StatusInternalServerError,
+			Message: "Error processing query in SQL",
+		}
+		respJson, _ := json.Marshal(respError)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(respJson)
 		return
 	}
 
-	var offerRows []offer
+	var offerRows []models.Sale
 
 	for rows.Next() {
-		offerRow := offer{}
+		offerRow := models.Sale{}
 		err = rows.Scan(&offerRow.OfferId, &offerRow.SellerId, &offerRow.Name, &offerRow.Price, &offerRow.Quantity)
 		if err != nil {
 			// TODO: log error
-			http.Error(w, "Error processing query in SQL rows", 500)
+			respError := models.Error{
+				Code: http.StatusInternalServerError,
+				Message: "Error parsing SQL query result",
+			}
+			respJson, _ := json.Marshal(respError)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write(respJson)
 			return
 		}
 		offerRows = append(offerRows, offerRow)
