@@ -58,7 +58,7 @@ func (h *Sales) GetSales(w http.ResponseWriter, r *http.Request) {
 
 	nameQuery := r.URL.Query().Get("query")
 	if nameQuery != "" {
-		newFilter := fmt.Sprintf(`Name LIKE '%' || $%d || '%'`, len(filters)+1)
+		newFilter := fmt.Sprintf(`Name LIKE '%%' || $%d || '%%'`, len(filters)+1)
 		filters = append(filters, newFilter)
 		filterVals = append(filterVals, nameQuery)
 	}
