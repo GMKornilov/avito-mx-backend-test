@@ -16,3 +16,6 @@
 
 # Goland directory
 .idea/
+
+#uploaded .xlsx tables
+uploads/

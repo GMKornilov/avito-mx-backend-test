@@ -42,32 +42,3 @@ func FromExcelRow(row *xlsx.Row, sellerId int) (*UploadQueryRow, error) {
 
 	return result, nil
 }
-
-func FromExcelSheet(sheet *xlsx.Sheet, sellerId int) ([]*UploadQueryRow, error) {
-	var rows []*UploadQueryRow
-	err := sheet.ForEachRow(func(row *xlsx.Row) error {
-		uploadQueryRow, err := FromExcelRow(row, sellerId)
-		if err != nil {
-			return err
-		}
-		rows = append(rows, uploadQueryRow)
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-	return rows, nil
-}
-
-func FromExcelFile(file *xlsx.File, sellerId int) ([]*UploadQueryRow, error) {
-	var queryRows = []*UploadQueryRow{}
-	for _, sheet := range file.Sheet {
-		sheetQueryRows, err := FromExcelSheet(sheet, sellerId)
-		if err != nil {
-			return nil, err
-		}
-		queryRows = append(queryRows, sheetQueryRows...)
-	}
-	return queryRows, nil
-}

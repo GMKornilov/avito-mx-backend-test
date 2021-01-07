@@ -16,7 +16,7 @@ func main() {
 		panic(err)
 	}
 
-	handler := &controllers.Sales{DB: db}
+	handler := controllers.NewSalesController(db)
 	http.HandleFunc("/offers/", handler.GetSales)
 	http.ListenAndServe(":8080", nil)
 }
