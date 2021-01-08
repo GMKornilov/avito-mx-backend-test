@@ -198,6 +198,7 @@ func (s *salesController) GetSales(w http.ResponseWriter, r *http.Request) {
 		respJson, _ := json.Marshal(respErr)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write(respJson)
+		return
 	}
 
 	respJson, _ := json.Marshal(sales)

@@ -15,8 +15,9 @@ const (
 )
 
 func initDB(username, password, database string) (*sql.DB, error) {
-	dsn := fmt.Sprintf("user = %s port = %d password = %s dbname = %s sslmode=disable",
-		username, PORT, password, database)
+	dsn := fmt.Sprintf(
+		"postgresql://%s:%s@database:%d/%s?sslmode=disable",
+		username, password, PORT, database)
 
 	conn, err := sql.Open("postgres", dsn)
 	if err != nil {
