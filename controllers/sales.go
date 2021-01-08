@@ -15,20 +15,133 @@ import (
 )
 
 type Sales struct {
-	DB        *sql.DB
-	totalJobs int
+	DB *sql.DB
 }
 
-func NewSalesController(DB *sql.DB) *Sales {
-	return &Sales{
-		DB:        DB,
-		totalJobs: 0,
+type filter struct {
+	SellerId *int    `json:"seller_id"`
+	OfferId  *int    `json:"offer_id"`
+	Query    *string `json:"query"`
+}
+
+func (h *Sales) AddSale(newSale models.Sale) (int64, error) {
+	query := `INSERT INTO sales (seller_id, offer_id, price, name, quantity) VALUES ($1, $2, $3, $4, $5);`
+	res, err := h.DB.Exec(query, newSale.SellerId, newSale.OfferId, newSale.Price, newSale.Name, newSale.Quantity)
+	if err != nil {
+		return 0, nil
+	}
+	rowsInserted, err := res.RowsAffected()
+	if err != nil {
+		return 0, nil
+	}
+	return rowsInserted, nil
+}
+
+func (h *Sales) FindByIdPair(sellerId int, offerId int) (*models.Sale, error) {
+	sale := new(models.Sale)
+	query := `SELECT offer_id, seller_id, name, price, quantity FROM sales WHERE seller_id = $1 AND offer_id = $2`
+	err := h.DB.QueryRow(query, sellerId, offerId).Scan(&sale.OfferId, &sale.SellerId, &sale.Name, &sale.Price, &sale.Quantity)
+	if err != nil {
+		return &models.Sale{}, err
+	}
+	return sale, nil
+}
+
+func (h *Sales) UpdateSale(sale models.Sale) (int64, error) {
+	query := `UPDATE sales SET price=$3, name=$4, quantity=$5 WHERE seller_id = $1 AND offer_id = $2;`
+	res, err := h.DB.Exec(query, sale.SellerId, sale.OfferId, sale.Price, sale.Name, sale.Quantity)
+	if err != nil {
+		return 0, err
+	}
+	rowsUpdated, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return rowsUpdated, nil
+}
+
+func (h *Sales) DeleteByIdPair(sellerId int, offerId int) (int64, error) {
+	query := `DELETE FROM sales WHERE seller_id = $1 AND offer_id = $2;`
+	res, err := h.DB.Exec(query, sellerId, offerId)
+	if err != nil {
+		return 0, err
+	}
+	rowsDeleted, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return rowsDeleted, nil
+}
+
+func (h *Sales) FindByFilter(filter filter) ([]models.Sale, error) {
+	var sales []models.Sale
+
+	var filters []string
+	var filterVals []interface{}
+
+	if filter.SellerId != nil {
+		newFilter := fmt.Sprintf("seller_id = $%d", len(filters)+1)
+		filters = append(filters, newFilter)
+		filterVals = append(filterVals, *filter.SellerId)
+	}
+
+	if filter.OfferId != nil {
+		newFilter := fmt.Sprintf("offer_id = $%d", len(filters)+1)
+		filters = append(filters, newFilter)
+		filterVals = append(filterVals, *filter.OfferId)
+	}
+
+	if filter.Query != nil {
+		newFilter := fmt.Sprintf(`LOWER(name) LIKE '%%' || LOWER($%d) || '%%'`, len(filters)+1)
+		filters = append(filters, newFilter)
+		filterVals = append(filterVals, *filter.Query)
+	}
+
+	query := `SELECT offer_id, seller_id, name, price, quantity FROM sales`
+	if len(filters) > 0 {
+		query += " WHERE "
+		query += strings.Join(filters, " AND ")
+	}
+	query += ";"
+
+	rows, err := h.DB.Query(query, filterVals...)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		saleRow := models.Sale{}
+
+		err := rows.Scan(&saleRow.OfferId, &saleRow.SellerId, &saleRow.Name, &saleRow.Price, &saleRow.Quantity)
+
+		if err != nil {
+			return nil, err
+		}
+
+		sales = append(sales, saleRow)
+	}
+	rows.Close()
+
+	return sales, nil
+}
+
+type SalesController interface {
+	GetSales(w http.ResponseWriter, r *http.Request)
+	Upload(w http.ResponseWriter, r *http.Request)
+}
+
+type salesController struct {
+	Sales *Sales
+}
+
+func NewSalesController(DB *sql.DB) SalesController {
+	return &salesController{
+		Sales: &Sales{DB: DB},
 	}
 }
 
-func (h *Sales) GetSales(w http.ResponseWriter, r *http.Request) {
-	var filters []string
-	var filterVals []interface{}
+func (s *salesController) GetSales(w http.ResponseWriter, r *http.Request) {
+	filter := filter{}
 
 	sellerIdStr := r.URL.Query().Get("seller_id")
 	if sellerIdStr != "" {
@@ -43,13 +156,12 @@ func (h *Sales) GetSales(w http.ResponseWriter, r *http.Request) {
 			w.Write(respJson)
 			return
 		} else {
-			newFilter := fmt.Sprintf("seller_id = $%d", len(filters)+1)
-			filters = append(filters, newFilter)
-			filterVals = append(filterVals, sellerId)
+			filter.SellerId = &sellerId
 		}
 	}
 
 	offerIdStr := r.URL.Query().Get("offer_id")
+
 	if offerIdStr != "" {
 		offerId, err := strconv.Atoi(sellerIdStr)
 		if err != nil {
@@ -62,65 +174,32 @@ func (h *Sales) GetSales(w http.ResponseWriter, r *http.Request) {
 			w.Write(respJson)
 			return
 		} else {
-			newFilter := fmt.Sprintf("offer_id = $%d", len(filters)+1)
-			filters = append(filters, newFilter)
-			filterVals = append(filterVals, offerId)
+			filter.OfferId = &offerId
 		}
 	}
 
 	nameQuery := r.URL.Query().Get("query")
 	if nameQuery != "" {
-		newFilter := fmt.Sprintf(`LOWER(name) LIKE '%%' || LOWER($%d) || '%%'`, len(filters)+1)
-		filters = append(filters, newFilter)
-		filterVals = append(filterVals, nameQuery)
+		filter.Query = &nameQuery
 	}
 
-	query := "SELECT offer_id, seller_id, name, price, quantity FROM sales"
-	if len(filters) > 0 {
-		query += " WHERE "
-		query += strings.Join(filters, " AND ")
-	}
-	query += ";"
-
-	rows, err := h.DB.Query(query, filterVals...)
+	sales, err := s.Sales.FindByFilter(filter)
 
 	if err != nil {
-		// TODO: log error
-		respError := models.Error{
+		respErr := models.Error{
 			Code:    http.StatusInternalServerError,
-			Message: "Error processing query in SQL",
+			Message: "Error processing query",
 		}
-		respJson, _ := json.Marshal(respError)
+		respJson, _ := json.Marshal(respErr)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write(respJson)
-		return
 	}
 
-	var offerRows []models.Sale
-
-	for rows.Next() {
-		offerRow := models.Sale{}
-		err = rows.Scan(&offerRow.OfferId, &offerRow.SellerId, &offerRow.Name, &offerRow.Price, &offerRow.Quantity)
-		if err != nil {
-			// TODO: log error
-			respError := models.Error{
-				Code:    http.StatusInternalServerError,
-				Message: "Error parsing SQL query result",
-			}
-			respJson, _ := json.Marshal(respError)
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write(respJson)
-			return
-		}
-		offerRows = append(offerRows, offerRow)
-	}
-	rows.Close()
-
-	responseStr, _ := json.Marshal(offerRows)
-	w.Write(responseStr)
+	respJson, _ := json.Marshal(sales)
+	w.Write(respJson)
 }
 
-func (h *Sales) Upload(w http.ResponseWriter, r *http.Request) {
+func (s *salesController) Upload(w http.ResponseWriter, r *http.Request) {
 	uploadStatus := models.UploadStatus{}
 
 	excelUrl := r.URL.Query().Get("path")
@@ -208,70 +287,47 @@ func (h *Sales) Upload(w http.ResponseWriter, r *http.Request) {
 			uploadQuery = *newUploadQuery
 			return nil
 		})
-		h.processQuery(w, r, uploadQuery, &uploadStatus)
+		s.ProcessQuery(uploadQuery, &uploadStatus)
 	}
 
 	respJson, _ := json.Marshal(uploadStatus)
 	w.Write(respJson)
 }
 
-func (h *Sales) processQuery(w http.ResponseWriter, r *http.Request, q models.UploadQueryRow, u *models.UploadStatus) {
+func (s *salesController) ProcessQuery(q models.UploadQueryRow, u *models.UploadStatus) {
 	if q.Available {
 		// offer is available, we need to insert/update sale data
-		available, err := h.checkAvailability(q.Sale.SellerId, q.Sale.OfferId)
+		sale, err := s.Sales.FindByIdPair(q.Sale.SellerId, q.Sale.OfferId)
 		if err != nil {
 			// error happened while checking availability, count it as error during processing query
 			u.InternalErrors++
 			return
 		}
-		var query string
-		if available {
+		if sale != nil {
 			// there is such sale in db, need to update it
-			query = `UPDATE sales SET price=$3, name=$4, quantity=$5 WHERE seller_id = $1 AND offer_id = $2;`
+			rowsUpdated, err := s.Sales.UpdateSale(q.Sale)
+			if err != nil {
+				u.InternalErrors++
+				return
+			}
+			u.UpdatedSales += rowsUpdated
 		} else {
 			// there is no such sale in db, creating new one
-			query = `INSERT INTO sales (seller_id, offer_id, price, name, quantity) VALUES ($1, $2, $3, $4, $5);`
+			rowsCreated, err := s.Sales.AddSale(q.Sale)
+			if err != nil {
+				u.InternalErrors++
+				return
+			}
+			u.CreatedSales += rowsCreated
 		}
-		res, err := h.DB.Exec(query, q.Sale.SellerId, q.Sale.OfferId, q.Sale.Price, q.Sale.Name, q.Sale.Quantity)
-		if err != nil {
-			// error happened while updating sales
-			u.InternalErrors++
-			return
-		}
-		rowsUpdated, err := res.RowsAffected()
-		if err != nil {
-			u.InternalErrors++
-			return
-		}
-		u.UpdatedSales += rowsUpdated
 	} else {
 		// offer is unavailable, we need to delete it from db
-		query := `DELETE FROM sales WHERE seller_id = $1 AND offer_id = $2;`
-		res, err := h.DB.Exec(query, q.Sale.SellerId, q.Sale.OfferId)
-		if err != nil {
-			u.InternalErrors++
-			return
-		}
-		rowsDeleted, err := res.RowsAffected()
+		rowsDeleted, err := s.Sales.DeleteByIdPair(q.Sale.SellerId, q.Sale.OfferId)
+
 		if err != nil {
 			u.InternalErrors++
 			return
 		}
 		u.DeletedSales += rowsDeleted
 	}
-}
-
-// checks if there is a sale with pair of (sellerId, offerId)
-func (h *Sales) checkAvailability(sellerId int, offerId int) (bool, error) {
-	var tmpSaleId int
-	query := "SELECT sale_id FROM sales WHERE seller_id = $1 AND offer_id = $2;"
-	err := h.DB.QueryRow(query, sellerId, offerId).Scan(&tmpSaleId)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil
-		}
-		// TODO: log error
-		return false, err
-	}
-	return true, nil
 }
