@@ -18,7 +18,7 @@ type Sales struct {
 	DB *sql.DB
 }
 
-type filter struct {
+type Filter struct {
 	SellerId *int    `json:"seller_id"`
 	OfferId  *int    `json:"offer_id"`
 	Query    *string `json:"query"`
@@ -28,11 +28,11 @@ func (h *Sales) AddSale(newSale models.Sale) (int64, error) {
 	query := `INSERT INTO sales (seller_id, offer_id, price, name, quantity) VALUES ($1, $2, $3, $4, $5);`
 	res, err := h.DB.Exec(query, newSale.SellerId, newSale.OfferId, newSale.Price, newSale.Name, newSale.Quantity)
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 	rowsInserted, err := res.RowsAffected()
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 	return rowsInserted, nil
 }
@@ -73,7 +73,7 @@ func (h *Sales) DeleteByIdPair(sellerId int, offerId int) (int64, error) {
 	return rowsDeleted, nil
 }
 
-func (h *Sales) FindByFilter(filter filter) ([]models.Sale, error) {
+func (h *Sales) FindByFilter(filter Filter) ([]models.Sale, error) {
 	var sales []models.Sale
 
 	var filters []string
@@ -125,9 +125,14 @@ func (h *Sales) FindByFilter(filter filter) ([]models.Sale, error) {
 	return sales, nil
 }
 
+func (h *Sales) Close() {
+	h.DB.Close()
+}
+
 type SalesController interface {
 	GetSales(w http.ResponseWriter, r *http.Request)
 	Upload(w http.ResponseWriter, r *http.Request)
+	Close()
 }
 
 type salesController struct {
@@ -141,7 +146,7 @@ func NewSalesController(DB *sql.DB) SalesController {
 }
 
 func (s *salesController) GetSales(w http.ResponseWriter, r *http.Request) {
-	filter := filter{}
+	filter := Filter{}
 
 	sellerIdStr := r.URL.Query().Get("seller_id")
 	if sellerIdStr != "" {
@@ -292,6 +297,10 @@ func (s *salesController) Upload(w http.ResponseWriter, r *http.Request) {
 
 	respJson, _ := json.Marshal(uploadStatus)
 	w.Write(respJson)
+}
+
+func (s *salesController) Close() {
+	s.Sales.Close()
 }
 
 func (s *salesController) ProcessQuery(q models.UploadQueryRow, u *models.UploadStatus) {

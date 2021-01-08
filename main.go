@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"github.com/fertilewaif/avito-mx-backend-test/controllers"
 	_ "github.com/lib/pq"
+	"log"
 	"net/http"
 )
 
@@ -18,5 +19,9 @@ func main() {
 
 	handler := controllers.NewSalesController(db)
 	http.HandleFunc("/offers/", handler.GetSales)
-	http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	handler.Close()
 }
