@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/fertilewaif/avito-mx-backend-test/controllers"
+	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
@@ -44,8 +45,14 @@ func main() {
 		panic(err)
 	}
 
+	r := mux.NewRouter()
 	handler := controllers.NewSalesController(db)
-	http.HandleFunc("/offers/", handler.GetSales)
+
+	r.HandleFunc("/offers", handler.GetSales)
+	r.HandleFunc("/upload", handler.Upload).Methods("POST")
+
+	http.Handle("/", r)
+
 	err = http.ListenAndServe(":8080", nil)
 	if err != nil {
 		log.Fatal(err)
