@@ -42,7 +42,7 @@ func (h *Sales) FindByIdPair(sellerId int, offerId int) (*models.Sale, error) {
 	query := `SELECT offer_id, seller_id, name, price, quantity FROM sales WHERE seller_id = $1 AND offer_id = $2`
 	err := h.DB.QueryRow(query, sellerId, offerId).Scan(&sale.OfferId, &sale.SellerId, &sale.Name, &sale.Price, &sale.Quantity)
 	if err != nil {
-		return &models.Sale{}, err
+		return nil, err
 	}
 	return sale, nil
 }
@@ -139,6 +139,11 @@ type salesController struct {
 	Sales *Sales
 }
 
+type uploadRequest struct {
+	SellerId int `json:"seller_id"`
+	ExcelUrl string `json:"path"`
+}
+
 func NewSalesController(DB *sql.DB) SalesController {
 	return &salesController{
 		Sales: &Sales{DB: DB},
@@ -206,17 +211,14 @@ func (s *salesController) GetSales(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *salesController) Upload(w http.ResponseWriter, r *http.Request) {
-	uploadStatus := models.UploadStatus{}
+	var req uploadRequest
 
-	excelUrl := r.URL.Query().Get("path")
+	err := json.NewDecoder(r.Body).Decode(&req)
 
-	sellerIdStr := r.URL.Query().Get("seller_id")
-	sellerId, err := strconv.Atoi(sellerIdStr)
 	if err != nil {
-		// TODO: log error
 		respError := models.Error{
 			Code:    http.StatusBadRequest,
-			Message: "Invalid value of seller_id, should be integer",
+			Message: "Error parsing request body",
 		}
 		respJson, _ := json.Marshal(respError)
 		w.WriteHeader(http.StatusBadRequest)
@@ -224,7 +226,9 @@ func (s *salesController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	download, err := http.Get(excelUrl)
+	uploadStatus := models.UploadStatus{}
+
+	download, err := http.Get(req.ExcelUrl)
 	if err != nil {
 		// TODO: log error
 		respError := models.Error{
@@ -285,15 +289,15 @@ func (s *salesController) Upload(w http.ResponseWriter, r *http.Request) {
 	for _, sheet := range wb.Sheets {
 		var uploadQuery models.UploadQueryRow
 		sheet.ForEachRow(func(row *xlsx.Row) error {
-			newUploadQuery, err := models.FromExcelRow(row, sellerId)
+			newUploadQuery, err := models.FromExcelRow(row, req.SellerId)
 			if err != nil {
 				uploadStatus.QueryErrors++
 				return nil
 			}
 			uploadQuery = *newUploadQuery
+			s.ProcessQuery(uploadQuery, &uploadStatus)
 			return nil
 		})
-		s.ProcessQuery(uploadQuery, &uploadStatus)
 	}
 
 	respJson, _ := json.Marshal(uploadStatus)
@@ -308,7 +312,7 @@ func (s *salesController) ProcessQuery(q models.UploadQueryRow, u *models.Upload
 	if q.Available {
 		// offer is available, we need to insert/update sale data
 		sale, err := s.Sales.FindByIdPair(q.Sale.SellerId, q.Sale.OfferId)
-		if err != nil {
+		if err != nil && err != sql.ErrNoRows {
 			// error happened while checking availability, count it as error during processing query
 			u.InternalErrors++
 			return
@@ -338,6 +342,7 @@ func (s *salesController) ProcessQuery(q models.UploadQueryRow, u *models.Upload
 			u.InternalErrors++
 			return
 		}
+
 		u.DeletedSales += rowsDeleted
 	}
 }
