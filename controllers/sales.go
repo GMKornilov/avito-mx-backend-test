@@ -3,7 +3,6 @@ package controllers
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"github.com/fertilewaif/avito-mx-backend-test/models"
 	"github.com/fertilewaif/avito-mx-backend-test/utils"
 	"github.com/tealeg/xlsx/v3"
@@ -11,123 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 )
-
-type Sales struct {
-	DB *sql.DB
-}
-
-type Filter struct {
-	SellerId *int    `json:"seller_id"`
-	OfferId  *int    `json:"offer_id"`
-	Query    *string `json:"query"`
-}
-
-func (h *Sales) AddSale(newSale models.Sale) (int64, error) {
-	query := `INSERT INTO sales (seller_id, offer_id, price, name, quantity) VALUES ($1, $2, $3, $4, $5);`
-	res, err := h.DB.Exec(query, newSale.SellerId, newSale.OfferId, newSale.Price, newSale.Name, newSale.Quantity)
-	if err != nil {
-		return 0, err
-	}
-	rowsInserted, err := res.RowsAffected()
-	if err != nil {
-		return 0, err
-	}
-	return rowsInserted, nil
-}
-
-func (h *Sales) FindByIdPair(sellerId int, offerId int) (*models.Sale, error) {
-	sale := new(models.Sale)
-	query := `SELECT offer_id, seller_id, name, price, quantity FROM sales WHERE seller_id = $1 AND offer_id = $2`
-	err := h.DB.QueryRow(query, sellerId, offerId).Scan(&sale.OfferId, &sale.SellerId, &sale.Name, &sale.Price, &sale.Quantity)
-	if err != nil {
-		return nil, err
-	}
-	return sale, nil
-}
-
-func (h *Sales) UpdateSale(sale models.Sale) (int64, error) {
-	query := `UPDATE sales SET price=$3, name=$4, quantity=$5 WHERE seller_id = $1 AND offer_id = $2;`
-	res, err := h.DB.Exec(query, sale.SellerId, sale.OfferId, sale.Price, sale.Name, sale.Quantity)
-	if err != nil {
-		return 0, err
-	}
-	rowsUpdated, err := res.RowsAffected()
-	if err != nil {
-		return 0, err
-	}
-	return rowsUpdated, nil
-}
-
-func (h *Sales) DeleteByIdPair(sellerId int, offerId int) (int64, error) {
-	query := `DELETE FROM sales WHERE seller_id = $1 AND offer_id = $2;`
-	res, err := h.DB.Exec(query, sellerId, offerId)
-	if err != nil {
-		return 0, err
-	}
-	rowsDeleted, err := res.RowsAffected()
-	if err != nil {
-		return 0, err
-	}
-	return rowsDeleted, nil
-}
-
-func (h *Sales) FindByFilter(filter Filter) ([]models.Sale, error) {
-	var sales []models.Sale
-
-	var filters []string
-	var filterVals []interface{}
-
-	if filter.SellerId != nil {
-		newFilter := fmt.Sprintf("seller_id = $%d", len(filters)+1)
-		filters = append(filters, newFilter)
-		filterVals = append(filterVals, *filter.SellerId)
-	}
-
-	if filter.OfferId != nil {
-		newFilter := fmt.Sprintf("offer_id = $%d", len(filters)+1)
-		filters = append(filters, newFilter)
-		filterVals = append(filterVals, *filter.OfferId)
-	}
-
-	if filter.Query != nil {
-		newFilter := fmt.Sprintf(`LOWER(name) LIKE '%%' || LOWER($%d) || '%%'`, len(filters)+1)
-		filters = append(filters, newFilter)
-		filterVals = append(filterVals, *filter.Query)
-	}
-
-	query := `SELECT offer_id, seller_id, name, price, quantity FROM sales`
-	if len(filters) > 0 {
-		query += " WHERE "
-		query += strings.Join(filters, " AND ")
-	}
-	query += ";"
-
-	rows, err := h.DB.Query(query, filterVals...)
-	if err != nil {
-		return nil, err
-	}
-
-	for rows.Next() {
-		saleRow := models.Sale{}
-
-		err := rows.Scan(&saleRow.OfferId, &saleRow.SellerId, &saleRow.Name, &saleRow.Price, &saleRow.Quantity)
-
-		if err != nil {
-			return nil, err
-		}
-
-		sales = append(sales, saleRow)
-	}
-	rows.Close()
-
-	return sales, nil
-}
-
-func (h *Sales) Close() {
-	h.DB.Close()
-}
 
 type SalesController interface {
 	GetSales(w http.ResponseWriter, r *http.Request)
@@ -136,7 +19,7 @@ type SalesController interface {
 }
 
 type salesController struct {
-	Sales *Sales
+	Sales *models.Sales
 }
 
 type uploadRequest struct {
@@ -146,12 +29,12 @@ type uploadRequest struct {
 
 func NewSalesController(DB *sql.DB) SalesController {
 	return &salesController{
-		Sales: &Sales{DB: DB},
+		Sales: &models.Sales{DB: DB},
 	}
 }
 
 func (s *salesController) GetSales(w http.ResponseWriter, r *http.Request) {
-	filter := Filter{}
+	filter := models.Filter{}
 
 	sellerIdStr := r.URL.Query().Get("seller_id")
 	if sellerIdStr != "" {
