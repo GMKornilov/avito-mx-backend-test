@@ -1,0 +1,29 @@
+services:
+  database:
+    image: postgres
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./database/:/docker-entrypoint-initdb.d/
+    ports:
+      - 5432:5432
+    networks:
+      - local-network
+  app:
+    container_name: golang_app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - 8080:8080
+    restart: on-failure
+    depends_on:
+      - database
+    env_file:
+      - .env
+    networks:
+      - local-network
+networks:
+  local-network:
+    driver: bridge
