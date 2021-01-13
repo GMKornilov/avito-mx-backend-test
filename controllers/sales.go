@@ -15,21 +15,25 @@ import (
 type SalesController interface {
 	GetSales(w http.ResponseWriter, r *http.Request)
 	Upload(w http.ResponseWriter, r *http.Request)
+	GetJobStatus(w http.ResponseWriter, r *http.Request)
 	Close()
 }
 
 type salesController struct {
-	Sales *models.Sales
+	Sales  *models.Sales
+	Worker Worker
 }
 
 type uploadRequest struct {
-	SellerId int `json:"seller_id"`
+	SellerId int    `json:"seller_id"`
 	ExcelUrl string `json:"path"`
 }
 
 func NewSalesController(DB *sql.DB) SalesController {
+	sales := &models.Sales{DB: DB}
 	return &salesController{
-		Sales: &models.Sales{DB: DB},
+		Sales:  sales,
+		Worker: NewWorker(sales),
 	}
 }
 
@@ -109,8 +113,6 @@ func (s *salesController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uploadStatus := models.UploadStatus{}
-
 	download, err := http.Get(req.ExcelUrl)
 	if err != nil {
 		// TODO: log error
@@ -169,63 +171,27 @@ func (s *salesController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, sheet := range wb.Sheets {
-		var uploadQuery models.UploadQueryRow
-		sheet.ForEachRow(func(row *xlsx.Row) error {
-			newUploadQuery, err := models.FromExcelRow(row, req.SellerId)
-			if err != nil {
-				uploadStatus.QueryErrors++
-				return nil
-			}
-			uploadQuery = *newUploadQuery
-			s.ProcessQuery(uploadQuery, &uploadStatus)
-			return nil
-		})
-	}
+	jobId := s.Worker.StartJob(wb, req.SellerId)
 
-	respJson, _ := json.Marshal(uploadStatus)
+	respJson, _ := json.Marshal(struct {
+		JobId string `json:"job_id"`
+	}{JobId: jobId})
+
+	w.Write(respJson)
+}
+
+func (s *salesController) GetJobStatus(w http.ResponseWriter, r *http.Request) {
+	jobId := r.URL.Query().Get("job_id")
+	q := s.Worker.GetJobStatus(jobId)
+	if !q.Ready {
+		q.UploadResult = nil
+	} else {
+		s.Worker.FinishJob(jobId)
+	}
+	respJson, _ := json.Marshal(q)
 	w.Write(respJson)
 }
 
 func (s *salesController) Close() {
 	s.Sales.Close()
-}
-
-func (s *salesController) ProcessQuery(q models.UploadQueryRow, u *models.UploadStatus) {
-	if q.Available {
-		// offer is available, we need to insert/update sale data
-		sale, err := s.Sales.FindByIdPair(q.Sale.SellerId, q.Sale.OfferId)
-		if err != nil && err != sql.ErrNoRows {
-			// error happened while checking availability, count it as error during processing query
-			u.InternalErrors++
-			return
-		}
-		if sale != nil {
-			// there is such sale in db, need to update it
-			rowsUpdated, err := s.Sales.UpdateSale(q.Sale)
-			if err != nil {
-				u.InternalErrors++
-				return
-			}
-			u.UpdatedSales += rowsUpdated
-		} else {
-			// there is no such sale in db, creating new one
-			rowsCreated, err := s.Sales.AddSale(q.Sale)
-			if err != nil {
-				u.InternalErrors++
-				return
-			}
-			u.CreatedSales += rowsCreated
-		}
-	} else {
-		// offer is unavailable, we need to delete it from db
-		rowsDeleted, err := s.Sales.DeleteByIdPair(q.Sale.SellerId, q.Sale.OfferId)
-
-		if err != nil {
-			u.InternalErrors++
-			return
-		}
-
-		u.DeletedSales += rowsDeleted
-	}
 }

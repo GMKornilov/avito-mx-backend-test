@@ -1,6 +1,6 @@
 package models
 
-type UploadStatus struct {
+type UploadResult struct {
 	CreatedSales   int64 `json:"created_sales"`
 	UpdatedSales   int64 `json:"updated_sales"`
 	DeletedSales   int64 `json:"deleted_sales"`

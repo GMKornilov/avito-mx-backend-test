@@ -48,8 +48,9 @@ func main() {
 	r := mux.NewRouter()
 	handler := controllers.NewSalesController(db)
 
-	r.HandleFunc("/offers", handler.GetSales)
+	r.HandleFunc("/offers", handler.GetSales).Methods("GET")
 	r.HandleFunc("/upload", handler.Upload).Methods("POST")
+	r.HandleFunc("/get_status", handler.GetJobStatus).Methods("GET")
 
 	http.Handle("/", r)
 
