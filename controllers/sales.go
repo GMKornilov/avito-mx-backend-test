@@ -4,11 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"github.com/fertilewaif/avito-mx-backend-test/models"
-	"github.com/fertilewaif/avito-mx-backend-test/utils"
-	"github.com/tealeg/xlsx/v3"
-	"io"
 	"net/http"
-	"os"
 	"strconv"
 )
 
@@ -113,65 +109,7 @@ func (s *salesController) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	download, err := http.Get(req.ExcelUrl)
-	if err != nil {
-		// TODO: log error
-		respError := models.Error{
-			Code:    http.StatusBadRequest,
-			Message: "Couldn't download xlsx file on given link",
-		}
-		respJson, _ := json.Marshal(respError)
-		w.WriteHeader(respError.Code)
-		w.Write(respJson)
-		return
-	}
-	defer download.Body.Close()
-	tmpFilePath := "./uploads/" + utils.RandStringRunes(40) + ".xlsx"
-	tmpFile, err := os.Create(tmpFilePath)
-
-	if err != nil {
-		// TODO: log error
-		respError := models.Error{
-			Code:    http.StatusInternalServerError,
-			Message: "Error creating temporary file",
-		}
-		respJson, _ := json.Marshal(respError)
-		w.WriteHeader(respError.Code)
-		w.Write(respJson)
-		return
-	}
-
-	_, err = io.Copy(tmpFile, download.Body)
-
-	if err != nil {
-		// TODO: log error
-		respError := models.Error{
-			Code:    http.StatusInternalServerError,
-			Message: "Error downloading xlsx file",
-		}
-		respJson, _ := json.Marshal(respError)
-		w.WriteHeader(respError.Code)
-		w.Write(respJson)
-		tmpFile.Close()
-		return
-	}
-	tmpFile.Close()
-
-	wb, err := xlsx.OpenFile(tmpFilePath)
-
-	if err != nil {
-		// TODO: log error
-		respError := models.Error{
-			Code:    http.StatusInternalServerError,
-			Message: "Error opening xlsx file(maybe file has wrong format)",
-		}
-		respJson, _ := json.Marshal(respError)
-		w.WriteHeader(respError.Code)
-		w.Write(respJson)
-		return
-	}
-
-	jobId := s.Worker.StartJob(wb, req.SellerId)
+	jobId := s.Worker.StartJob(req.ExcelUrl, req.SellerId)
 
 	respJson, _ := json.Marshal(struct {
 		JobId string `json:"job_id"`
@@ -185,6 +123,7 @@ func (s *salesController) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	q := s.Worker.GetJobStatus(jobId)
 	if !q.Ready {
 		q.UploadResult = nil
+		q.Error = nil
 	} else {
 		s.Worker.FinishJob(jobId)
 	}
