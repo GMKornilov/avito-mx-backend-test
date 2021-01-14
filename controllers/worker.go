@@ -161,7 +161,17 @@ func (w *worker) processQuery(q models.UploadQueryRow, u *models.UploadResult) {
 
 func (w *worker) StartJob(url string, sellerId int) string {
 	newJobId := w.generateJobId()
-	newUploadStatus := new(UploadStatus)
+	newUploadStatus := &UploadStatus{
+		Ready:        false,
+		UploadResult: &models.UploadResult{
+			CreatedSales:   0,
+			UpdatedSales:   0,
+			DeletedSales:   0,
+			QueryErrors:    0,
+			InternalErrors: 0,
+		},
+		Error:        nil,
+	}
 
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
