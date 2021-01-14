@@ -1,10 +1,9 @@
-package controllers_test
+package models_test
 
 import (
 	"database/sql"
 	"fmt"
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/fertilewaif/avito-mx-backend-test/controllers"
 	"github.com/fertilewaif/avito-mx-backend-test/models"
 	"reflect"
 	"testing"
@@ -25,7 +24,7 @@ func NewMock() (*sql.DB, sqlmock.Sqlmock) {
 
 func TestSales_AddSale(t *testing.T) {
 	db, mock := NewMock()
-	sales := controllers.Sales{DB: db}
+	sales := models.Sales{DB: db}
 	defer sales.Close()
 
 	query := `INSERT INTO sales \(seller_id, offer_id, price, name, quantity\) VALUES \(\$1, \$2, \$3, \$4, \$5\);`
@@ -44,7 +43,7 @@ func TestSales_AddSale(t *testing.T) {
 
 func TestSales_AddSaleError(t *testing.T) {
 	db, mock := NewMock()
-	sales := controllers.Sales{DB: db}
+	sales := models.Sales{DB: db}
 	defer sales.Close()
 
 	query := `INSERT INTO sales \(seller_id, offer_id, price, name, quantity\) VALUES \(\$1, \$2, \$3, \$4, \$5\);`
@@ -60,7 +59,7 @@ func TestSales_AddSaleError(t *testing.T) {
 
 func TestSales_DeleteByIdPair(t *testing.T) {
 	db, mock := NewMock()
-	sales := controllers.Sales{DB: db}
+	sales := models.Sales{DB: db}
 	defer sales.Close()
 
 	query := `DELETE FROM sales WHERE seller_id \= \$1 AND offer_id \= \$2;`
@@ -79,7 +78,7 @@ func TestSales_DeleteByIdPair(t *testing.T) {
 
 func TestSales_DeleteByIdPairError(t *testing.T) {
 	db, mock := NewMock()
-	sales := controllers.Sales{DB: db}
+	sales := models.Sales{DB: db}
 	defer sales.Close()
 
 	query := `DELETE FROM sales WHERE seller_id \= \$1 AND offer_id \= \$2;`
@@ -94,7 +93,7 @@ func TestSales_DeleteByIdPairError(t *testing.T) {
 
 func TestSales_FindByIdPair(t *testing.T) {
 	db, mock := NewMock()
-	sales := controllers.Sales{DB: db}
+	sales := models.Sales{DB: db}
 	defer sales.Close()
 
 	query := `SELECT offer_id, seller_id, name, price, quantity FROM sales WHERE seller_id \= \$1 AND offer_id \= \$2`
@@ -115,12 +114,12 @@ func TestSales_FindByIdPair(t *testing.T) {
 
 func TestSales_FindByFilter(t *testing.T) {
 	db, mock := NewMock()
-	sales := controllers.Sales{DB: db}
+	sales := models.Sales{DB: db}
 	defer sales.Close()
 
 	offerId := 2
 	filterQuery := "test"
-	filter := controllers.Filter{
+	filter := models.Filter{
 		SellerId: nil,
 		OfferId:  &offerId,
 		Query:    &filterQuery,
@@ -146,7 +145,7 @@ func TestSales_FindByFilter(t *testing.T) {
 
 func TestSales_UpdateSale(t *testing.T) {
 	db, mock := NewMock()
-	sales := controllers.Sales{DB: db}
+	sales := models.Sales{DB: db}
 	defer sales.Close()
 
 	query := `UPDATE sales SET price\=\$3, name\=\$4, quantity\=\$5 WHERE seller_id \= \$1 AND offer_id \= \$2;`

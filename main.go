@@ -15,10 +15,10 @@ const (
 	PORT = 5432
 )
 
-func initDB(username, password, database string) (*sql.DB, error) {
+func initDB(username, password, database, host string) (*sql.DB, error) {
 	dsn := fmt.Sprintf(
-		"postgresql://%s:%s@database:%d/%s?sslmode=disable",
-		username, password, PORT, database)
+		"postgresql://%s:%s@%s:%d/%s?sslmode=disable",
+		username, password, host, PORT, database)
 
 	conn, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -34,12 +34,13 @@ func initDB(username, password, database string) (*sql.DB, error) {
 }
 
 func main() {
-	dbUser, dbPassword, dbName :=
+	dbUser, dbPassword, dbName, dbHost :=
 		os.Getenv("POSTGRES_USER"),
 		os.Getenv("POSTGRES_PASSWORD"),
-		os.Getenv("POSTGRES_DB")
+		os.Getenv("POSTGRES_DB"),
+		os.Getenv("DB_HOST")
 
-	db, err := initDB(dbUser, dbPassword, dbName)
+	db, err := initDB(dbUser, dbPassword, dbName, dbHost)
 
 	if err != nil {
 		panic(err)
@@ -48,8 +49,9 @@ func main() {
 	r := mux.NewRouter()
 	handler := controllers.NewSalesController(db)
 
-	r.HandleFunc("/offers", handler.GetSales)
+	r.HandleFunc("/offers", handler.GetSales).Methods("GET")
 	r.HandleFunc("/upload", handler.Upload).Methods("POST")
+	r.HandleFunc("/get_status", handler.GetJobStatus).Methods("GET")
 
 	http.Handle("/", r)
 
