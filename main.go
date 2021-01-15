@@ -6,7 +6,7 @@ import (
 	"github.com/fertilewaif/avito-mx-backend-test/controllers"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
 )
@@ -33,6 +33,14 @@ func initDB(username, password, database, host string) (*sql.DB, error) {
 	return conn, nil
 }
 
+func init() {
+	log.SetOutput(os.Stdout)
+	log.SetFormatter(&log.TextFormatter{
+		DisableColors: false,
+		FullTimestamp: true,
+	})
+}
+
 func main() {
 	dbUser, dbPassword, dbName, dbHost :=
 		os.Getenv("POSTGRES_USER"),
@@ -43,7 +51,12 @@ func main() {
 	db, err := initDB(dbUser, dbPassword, dbName, dbHost)
 
 	if err != nil {
-		panic(err)
+		log.WithFields(log.Fields{
+			"postgres_user": dbUser,
+			"postgres_password": dbPassword,
+			"postgres_db_name": dbName,
+			"postgres_db_host": dbHost,
+		}).Fatal("Can't connect to database")
 	}
 
 	r := mux.NewRouter()

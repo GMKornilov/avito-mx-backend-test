@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"github.com/fertilewaif/avito-mx-backend-test/models"
+	log "github.com/sirupsen/logrus"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 )
@@ -40,6 +42,10 @@ func (s *salesController) GetSales(w http.ResponseWriter, r *http.Request) {
 	if sellerIdStr != "" {
 		sellerId, err := strconv.Atoi(sellerIdStr)
 		if err != nil {
+			log.WithFields(log.Fields{
+				"seller_id_str": sellerIdStr,
+			}).Warningln("Error parsing seller_id from string")
+
 			w.WriteHeader(http.StatusBadRequest)
 			respError := models.Error{
 				Message: "Invalid value of seller_id, must be integer",
@@ -58,6 +64,11 @@ func (s *salesController) GetSales(w http.ResponseWriter, r *http.Request) {
 	if offerIdStr != "" {
 		offerId, err := strconv.Atoi(sellerIdStr)
 		if err != nil {
+			log.WithFields(log.Fields{
+				"error":        err,
+				"offer_id_str": offerIdStr,
+			}).Warningln("Error parsing offer_id from string")
+
 			w.WriteHeader(http.StatusBadRequest)
 			respError := models.Error{
 				Message: "Invalid value of offer_id, must be integer",
@@ -79,6 +90,10 @@ func (s *salesController) GetSales(w http.ResponseWriter, r *http.Request) {
 	sales, err := s.Sales.FindByFilter(filter)
 
 	if err != nil {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("Error getting sales from model")
+
 		respErr := models.Error{
 			Code:    http.StatusInternalServerError,
 			Message: "Error processing query",
@@ -99,6 +114,10 @@ func (s *salesController) Upload(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&req)
 
 	if err != nil {
+		log.WithFields(log.Fields{
+			"body": ioutil.ReadAll(r.Body),
+		}).Warningln("Error parsing request")
+
 		respError := models.Error{
 			Code:    http.StatusBadRequest,
 			Message: "Error parsing request body",

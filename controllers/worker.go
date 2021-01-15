@@ -2,10 +2,10 @@ package controllers
 
 import (
 	"crypto/md5"
-	"database/sql"
 	"fmt"
 	"github.com/fertilewaif/avito-mx-backend-test/models"
 	"github.com/fertilewaif/avito-mx-backend-test/utils"
+	log "github.com/sirupsen/logrus"
 	"github.com/tealeg/xlsx/v3"
 	"io"
 	"net/http"
@@ -21,7 +21,7 @@ type Worker interface {
 }
 
 type UploadStatus struct {
-	Ready        bool                `json:"ready"`
+	Ready        bool                 `json:"ready"`
 	UploadResult *models.UploadResult `json:"upload_result,omitempty"`
 	Error        *models.Error        `json:"error,omitempty"`
 }
@@ -55,6 +55,11 @@ func (w *worker) processDownload(url string, sellerId int, uploadStatus *UploadS
 	download, err := http.Get(url)
 
 	if err != nil {
+		log.WithFields(log.Fields{
+			"url":       url,
+			"seller_id": sellerId,
+		}).Warningln("Error downloading xlsx file from given url")
+
 		uploadStatus.Ready = true
 		uploadStatus.Error = &models.Error{
 			Code:    http.StatusBadRequest,
@@ -67,6 +72,13 @@ func (w *worker) processDownload(url string, sellerId int, uploadStatus *UploadS
 	tmpFile, err := os.Create(tmpFilePath)
 
 	if err != nil {
+		log.WithFields(log.Fields{
+			"error":     err,
+			"file_path": tmpFilePath,
+			"url":       url,
+			"seller_id": sellerId,
+		}).Errorln("Error creating temporary file")
+
 		download.Body.Close()
 
 		uploadStatus.Ready = true
@@ -81,6 +93,13 @@ func (w *worker) processDownload(url string, sellerId int, uploadStatus *UploadS
 	download.Body.Close()
 
 	if err != nil {
+		log.WithFields(log.Fields{
+			"error":     err,
+			"url":       url,
+			"seller_id": sellerId,
+			"file_path": tmpFilePath,
+		}).Errorln("Error downloading to temporary file")
+
 		uploadStatus.Ready = true
 		uploadStatus.Error = &models.Error{
 			Code:    http.StatusInternalServerError,
@@ -92,6 +111,13 @@ func (w *worker) processDownload(url string, sellerId int, uploadStatus *UploadS
 	wb, err := xlsx.OpenFile(tmpFilePath)
 
 	if err != nil {
+		log.WithFields(log.Fields{
+			"error":     err,
+			"url":       url,
+			"sellerId":  sellerId,
+			"file_path": tmpFilePath,
+		}).Errorln("Error opening xlsx file")
+
 		uploadStatus.Ready = true
 		uploadStatus.Error = &models.Error{
 			Code:    http.StatusInternalServerError,
@@ -109,6 +135,16 @@ func (w *worker) processFile(excelFile *xlsx.File, sellerId int, uploadStatus *U
 		sheet.ForEachRow(func(row *xlsx.Row) error {
 			newUploadQuery, err := models.FromExcelRow(row, sellerId)
 			if err != nil {
+				var cellValues []string
+				row.ForEachCell(func(c *xlsx.Cell) error {
+					cellValues = append(cellValues, c.Value)
+					return nil
+				})
+
+				log.WithFields(log.Fields{
+					"cells" : cellValues,
+				}).Warningln("Error parsing row")
+
 				uploadStatus.UploadResult.QueryErrors++
 				return nil
 			}
@@ -124,8 +160,14 @@ func (w *worker) processQuery(q models.UploadQueryRow, u *models.UploadResult) {
 	if q.Available {
 		// offer is available, we need to insert/update sale data
 		sale, err := w.sales.FindByIdPair(q.Sale.SellerId, q.Sale.OfferId)
-		if err != nil && err != sql.ErrNoRows {
+		if err != nil {
 			// error happened while checking availability, count it as error during processing query
+			log.WithFields(log.Fields{
+				"error":     err,
+				"sale":      q.Sale,
+				"available": q.Available,
+			}).Errorln("Error processing finding by given seller_id and offer_id")
+
 			u.InternalErrors++
 			return
 		}
@@ -133,6 +175,12 @@ func (w *worker) processQuery(q models.UploadQueryRow, u *models.UploadResult) {
 			// there is such sale in db, need to update it
 			rowsUpdated, err := w.sales.UpdateSale(q.Sale)
 			if err != nil {
+				log.WithFields(log.Fields{
+					"error":     err,
+					"sale":      q.Sale,
+					"available": q.Available,
+				}).Errorln("Error updating queries in db")
+
 				u.InternalErrors++
 				return
 			}
@@ -141,6 +189,12 @@ func (w *worker) processQuery(q models.UploadQueryRow, u *models.UploadResult) {
 			// there is no such sale in db, creating new one
 			rowsCreated, err := w.sales.AddSale(q.Sale)
 			if err != nil {
+				log.WithFields(log.Fields{
+					"error":     err,
+					"sale":      q.Sale,
+					"available": q.Available,
+				}).Errorln("Error adding new sale")
+
 				u.InternalErrors++
 				return
 			}
@@ -151,6 +205,14 @@ func (w *worker) processQuery(q models.UploadQueryRow, u *models.UploadResult) {
 		rowsDeleted, err := w.sales.DeleteByIdPair(q.Sale.SellerId, q.Sale.OfferId)
 
 		if err != nil {
+			log.WithFields(log.Fields{
+				"error":     err,
+				"sale":      q.Sale,
+				"available": q.Available,
+				"seller_id": q.Sale.SellerId,
+				"offer_id":  q.Sale.OfferId,
+			}).Errorln("Error deleting existing pair")
+
 			u.InternalErrors++
 			return
 		}
@@ -162,7 +224,7 @@ func (w *worker) processQuery(q models.UploadQueryRow, u *models.UploadResult) {
 func (w *worker) StartJob(url string, sellerId int) string {
 	newJobId := w.generateJobId()
 	newUploadStatus := &UploadStatus{
-		Ready:        false,
+		Ready: false,
 		UploadResult: &models.UploadResult{
 			CreatedSales:   0,
 			UpdatedSales:   0,
@@ -170,7 +232,7 @@ func (w *worker) StartJob(url string, sellerId int) string {
 			QueryErrors:    0,
 			InternalErrors: 0,
 		},
-		Error:        nil,
+		Error: nil,
 	}
 
 	w.mutex.Lock()
@@ -180,7 +242,6 @@ func (w *worker) StartJob(url string, sellerId int) string {
 
 	return newJobId
 }
-
 
 func (w *worker) GetJobStatus(jobId string) UploadStatus {
 	w.mutex.RLock()
