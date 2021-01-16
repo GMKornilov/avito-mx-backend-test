@@ -7,8 +7,10 @@ import (
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
+	"math/rand"
 	"net/http"
 	"os"
+	"time"
 )
 
 const (
@@ -34,6 +36,8 @@ func initDB(username, password, database, host string) (*sql.DB, error) {
 }
 
 func init() {
+	rand.Seed(time.Now().UnixNano())
+
 	log.SetOutput(os.Stdout)
 	log.SetFormatter(&log.TextFormatter{
 		DisableColors: false,
