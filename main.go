@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/fertilewaif/avito-mx-backend-test/controllers"
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
@@ -56,11 +57,12 @@ func main() {
 
 	if err != nil {
 		log.WithFields(log.Fields{
+			"error": err,
 			"postgres_user": dbUser,
 			"postgres_password": dbPassword,
 			"postgres_db_name": dbName,
 			"postgres_db_host": dbHost,
-		}).Fatal("Can't connect to database")
+		}).Fatalln("Can't connect to database")
 	}
 
 	r := mux.NewRouter()
@@ -70,11 +72,13 @@ func main() {
 	r.HandleFunc("/upload", handler.Upload).Methods("POST")
 	r.HandleFunc("/get_status", handler.GetJobStatus).Methods("GET")
 
-	http.Handle("/", r)
+	loggingRouter := handlers.LoggingHandler(os.Stdout, r)
 
-	err = http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", loggingRouter)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Fatalln(err)
 	}
 	handler.Close()
 }

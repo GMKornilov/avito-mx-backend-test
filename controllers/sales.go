@@ -114,8 +114,9 @@ func (s *salesController) Upload(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&req)
 
 	if err != nil {
+		bodyContent, _ := ioutil.ReadAll(r.Body)
 		log.WithFields(log.Fields{
-			"body": ioutil.ReadAll(r.Body),
+			"body": string(bodyContent),
 		}).Warningln("Error parsing request")
 
 		respError := models.Error{
