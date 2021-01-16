@@ -4,11 +4,14 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/fertilewaif/avito-mx-backend-test/controllers"
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
-	"log"
+	log "github.com/sirupsen/logrus"
+	"math/rand"
 	"net/http"
 	"os"
+	"time"
 )
 
 const (
@@ -33,6 +36,16 @@ func initDB(username, password, database, host string) (*sql.DB, error) {
 	return conn, nil
 }
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+
+	log.SetOutput(os.Stdout)
+	log.SetFormatter(&log.TextFormatter{
+		DisableColors: false,
+		FullTimestamp: true,
+	})
+}
+
 func main() {
 	dbUser, dbPassword, dbName, dbHost :=
 		os.Getenv("POSTGRES_USER"),
@@ -43,7 +56,13 @@ func main() {
 	db, err := initDB(dbUser, dbPassword, dbName, dbHost)
 
 	if err != nil {
-		panic(err)
+		log.WithFields(log.Fields{
+			"error": err,
+			"postgres_user": dbUser,
+			"postgres_password": dbPassword,
+			"postgres_db_name": dbName,
+			"postgres_db_host": dbHost,
+		}).Fatalln("Can't connect to database")
 	}
 
 	r := mux.NewRouter()
@@ -53,11 +72,13 @@ func main() {
 	r.HandleFunc("/upload", handler.Upload).Methods("POST")
 	r.HandleFunc("/get_status", handler.GetJobStatus).Methods("GET")
 
-	http.Handle("/", r)
+	loggingRouter := handlers.LoggingHandler(os.Stdout, r)
 
-	err = http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", loggingRouter)
 	if err != nil {
-		log.Fatal(err)
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Fatalln(err)
 	}
 	handler.Close()
 }
